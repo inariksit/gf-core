@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, MagicHash #-}
+{-# LANGUAGE RankNTypes #-}
 -- for unboxed shifts
 
 -----------------------------------------------------------------------------
@@ -6,7 +7,7 @@
 -- Module      : Data.Binary.Get
 -- Copyright   : Lennart Kolmodin
 -- License     : BSD3-style (see LICENSE)
--- 
+--
 -- Maintainer  : Lennart Kolmodin <kolmodin@dtek.chalmers.se>
 -- Stability   : experimental
 -- Portability : portable to Hugs and GHC.
@@ -111,11 +112,14 @@ data S = S {-# UNPACK #-} !B.ByteString  -- current chunk
            {-# UNPACK #-} !Int64         -- bytes read
 
 -- | The Get monad is just a State monad carrying around the input ByteString
-newtype Get a = Get { unGet :: S -> (a, S) }
+newtype Get a = Get { unGet :: forall r. S -> Cont a r -> r }
+
+type Cont a r = S -> a -> r
+
+
 
 instance Functor Get where
-    fmap f m = Get (\s -> case unGet m s of
-                            (a, s') -> (f a, s'))
+    fmap f m = Get $ \s k -> unGet m s $ \s' a -> k s' (f a)
     {-# INLINE fmap #-}
 
 instance Applicative Get where
@@ -123,11 +127,10 @@ instance Applicative Get where
     (<*>) = ap
 
 instance Monad Get where
-    return a  = Get (\s -> (a, s))
+    return a  = Get (\s k -> k s a)
     {-# INLINE return #-}
 
-    m >>= k   = Get (\s -> case unGet m s of
-                             (a, s') -> unGet (k a) s')
+    m >>= f   = Get $ \s k -> unGet m s $ \s' a -> unGet (f a) s' k
     {-# INLINE (>>=) #-}
 
 #if !(MIN_VERSION_base(4,13,0))
@@ -137,17 +140,17 @@ instance Monad Get where
 instance Fail.MonadFail Get where
     fail      = failDesc
 
-instance MonadFix Get where
-    mfix f = Get (\s -> let (a,s') = unGet (f a) s 
-                        in (a,s'))
+-- instance MonadFix Get where
+--     mfix f = Get (\s -> let (a,s') = unGet (f a) s
+--                         in (a,s'))
 
 ------------------------------------------------------------------------
 
 get :: Get S
-get   = Get (\s -> (s, s))
+get   = Get $ \ s k -> k s s
 
 put :: S -> Get ()
-put s = Get (\_ -> ((), s))
+put s = Get (\ _ k -> k s ())
 
 ------------------------------------------------------------------------
 --
@@ -184,15 +187,14 @@ mkState (B.LPS xs) =
 
 -- | Run the Get monad applies a 'get'-based parser on the input ByteString
 runGet :: Get a -> L.ByteString -> a
-runGet m str = case unGet m (initState str) of (a, _) -> a
+runGet m str = unGet m (initState str) (\ s a -> a)
 
 -- | Run the Get monad applies a 'get'-based parser on the input
 -- ByteString. Additional to the result of get it returns the number of
 -- consumed bytes and the rest of the input.
 runGetState :: Get a -> L.ByteString -> Int64 -> (a, L.ByteString, Int64)
 runGetState m str off =
-    case unGet m (mkState str off) of
-      (a, ~(S s ss newOff)) -> (a, s `joinBS` ss, newOff)
+    unGet m (mkState str off) $ \(S s ss newOff) a -> (a, s `joinBS` ss, newOff)
 
 ------------------------------------------------------------------------
 
@@ -245,7 +247,7 @@ lookAheadE gea = do
         _      -> return ()
     return ea
 
--- | Get the next up to @n@ bytes as a lazy ByteString, without consuming them. 
+-- | Get the next up to @n@ bytes as a lazy ByteString, without consuming them.
 uncheckedLookAhead :: Int64 -> Get L.ByteString
 uncheckedLookAhead n = do
     S s ss _ <- get
@@ -311,6 +313,8 @@ getLazyByteStringNul = do
         put $ mkState rest (bytes + L.length consume + 1)
         return consume
 {-# INLINE getLazyByteStringNul #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- | Get the remaining bytes as a lazy ByteString
 getRemainingLazyByteString :: Get L.ByteString
@@ -362,7 +366,7 @@ joinBS bb (B.LPS lb)
 -- second, this runs in constant heap space.
 --
 -- You must force the returned tuple for that to work, e.g.
--- 
+--
 -- > case splitAtST n xs of
 -- >    (ys,zs) -> consume ys ... consume zs
 --

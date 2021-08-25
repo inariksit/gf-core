@@ -42,6 +42,7 @@ import Control.Monad.Identity
 --import Control.Exception
 --import Debug.Trace(trace)
 import qualified Control.Monad.Fail as Fail
+import Debug.Trace (traceShow, trace)
 
 ----------------------------------------------------------------------
 -- main conversion function
@@ -289,12 +290,20 @@ data Path
   | CNil
   deriving (Eq,Show)
 
+instance Pretty Path where
+  pp (CProj la pa) =  pp la <+> pp pa
+  pp (CSel te pa) =  pp te <+> pp pa
+  pp CNil = mempty
+
 -- | The ProtoFCat represents a linearization type as term schema.
 -- The annotations are as follows: the strings are annotated with
 -- their index in the PMCFG tuple, the parameters are annotated
 -- with their value both as term and as index.
 data ProtoFCat  = PFCat Ident Int (Schema Identity Int (Int,[(Term,Int)]))
 type Env        = (ProtoFCat, [ProtoFCat])
+
+instance Pretty ProtoFCat where
+  pp (PFCat id n sc) = pp "PFCat" <+> pp id
 
 protoFCat :: SourceGrammar -> Cat -> Type -> ProtoFCat
 protoFCat gr cat lincat =
@@ -596,7 +605,7 @@ restrictHead path term = do
   put (head, args)
 
 restrictProtoFCat :: (Functor m, MonadPlus m) => Path -> Term -> ProtoFCat -> m ProtoFCat
-restrictProtoFCat path v (PFCat cat f schema) = do
+restrictProtoFCat path v (PFCat cat f schema) = trace (render . vcat $ [pp "", pp path, pp v , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $ do
   schema <- addConstraint path v schema
   return (PFCat cat f schema)
   where

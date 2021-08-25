@@ -311,13 +311,14 @@ protoFCat gr cat lincat =
     ((_,f),schema) -> PFCat (snd cat) f schema
 
 getFIds :: ProtoFCat -> [FId]
-getFIds (PFCat f cat schema) = trace (render . vcat $ [pp "" , pp "getFIds", pp f , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $
+getFIds c@(PFCat f cat schema) = trace (render . vcat $ [pp "\n-------", pp "getFIds", pp f , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $
   reverse (solutions (variants schema) ())
   where
-    variants (CRec rs)         = fmap sum $ mapM (\(lbl,Identity t) -> variants t) rs
-    variants (CTbl _ cs)       = fmap sum $ mapM (\(trm,Identity t) -> variants t) cs
-    variants (CStr _)          = return 0
-    variants (CPar (m,values)) = do (value,index) <- member values
+    variants (CRec rs)         = trace (render $ pp "getFIds.variants: found a record") $ fmap sum $ mapM (\(lbl,Identity t) -> variants t) rs
+    variants (CTbl x cs)       = trace (render $ pp "getFIds.variants: found a table" <+> pp x) $ fmap sum $ mapM (\(trm,Identity t) -> variants t) cs
+    variants (CStr x)          = trace (render $ pp "getFIds.variants: recursion ended on string" <+> pp x)$ return 0
+    variants (CPar (m,values)) = trace (render $ pp "getFIds.variants: found a parameter" <+> pp m <+> (pp $ show values)) $
+                                 do (value,index) <- member values
                                     return (m*index)
 
 catFactor :: ProtoFCat -> Int

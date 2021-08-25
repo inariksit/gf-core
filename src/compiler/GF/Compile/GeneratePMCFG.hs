@@ -311,7 +311,7 @@ protoFCat gr cat lincat =
     ((_,f),schema) -> PFCat (snd cat) f schema
 
 getFIds :: ProtoFCat -> [FId]
-getFIds (PFCat _ _ schema) =
+getFIds (PFCat f cat schema) = trace (render . vcat $ [pp "" , pp "getFIds", pp f , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $
   reverse (solutions (variants schema) ())
   where
     variants (CRec rs)         = fmap sum $ mapM (\(lbl,Identity t) -> variants t) rs
@@ -605,7 +605,7 @@ restrictHead path term = do
   put (head, args)
 
 restrictProtoFCat :: (Functor m, MonadPlus m) => Path -> Term -> ProtoFCat -> m ProtoFCat
-restrictProtoFCat path v (PFCat cat f schema) = trace (render . vcat $ [pp "", pp path, pp v , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $ do
+restrictProtoFCat path v (PFCat cat f schema) = do -- trace (render . vcat $ [pp "", pp path, pp v , pp cat <+> pp f, pp $ show schema,  pp "-------"]) $ do
   schema <- addConstraint path v schema
   return (PFCat cat f schema)
   where
